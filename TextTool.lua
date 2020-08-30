@@ -5,6 +5,10 @@ EXPAND_INTERVAL = 20
 -- (such as when taken out of an infinite bag).
 COLOR_ADAPT = true
 
+-- Determines if pressing enter will finish editing the text.
+-- If this is enabled, you can escape by typing "\n" without quotes.
+ENTER_TO_FINISH = false
+
 -- Offset of the Y position of the text from the object. Having the text
 -- hover a little (like 0.05) reduces clipping with some surfaces,
 -- but will have the opposite effect when flipped upside down.
@@ -25,6 +29,9 @@ AUTOLIFT = false
 ----------------------------------
 -- END OF VARIABLES TO EDIT
 ----------------------------------
+
+-- This table controls what is passed between save/load
+data = {size=200, color=Color(0,0,0), text='', interactable = true}
 
 function onLoad(saved_data)
   if saved_data ~= '' then
@@ -53,13 +60,22 @@ function input_func(obj, color, input, stillEditing)
     self.editInput(params)
   end
 
-  if not stillEditing then
+  local done = not stillEditing
+  if ENTER_TO_FINISH then
+    if input:sub(-1) == '\n' then
+      input = input:sub(1,-2)
+      done = true
+    end
+  end
+
+  if done then
     data.text = input
     updateState()
     if input ~= '' then staticMode() end
   end
 end
 
+-- When the inpupt box appears and lets the player type in it.
 function inputMode(player)
   self.clearContextMenu()
   if self.getButtons() and #self.getButtons() ~= 0 then
@@ -92,6 +108,7 @@ function inputMode(player)
   self.addContextMenuItem('Size: Decrease', function() changeSize(-50) end, true)
 end
 
+-- When the input box disappears and displays the text.
 function staticMode()
   self.clearContextMenu()
   if AUTOLOCK then
@@ -100,8 +117,14 @@ function staticMode()
   if self.getInputs() and #self.getInputs() ~= 0 then
     self.removeInput(0)
   end
+
+  local displayText = data.text
+  if ENTER_TO_FINISH then
+    displayText = displayText:gsub('\\n', '\n')
+  end
+
   self.createButton({
-    label=data.text,
+    label=displayText,
     click_function="none",
     function_owner=self,
     position={0,HOVER_HEIGHT,0}, rotation={0,0,0}, height=0, width=0,
@@ -208,6 +231,7 @@ function onDrop(player_color)
   end
 end
 
+-- Should be called every time
 function updateState()
   self.script_state = JSON.encode(data)
 end
