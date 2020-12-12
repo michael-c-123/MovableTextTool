@@ -1,37 +1,11 @@
+-- Code for bag to identify text tool objects
+movableTextTool_cowgoesmoo33 = true
+
 -- Number of characters before the text box width expands.
 EXPAND_INTERVAL = 20
 
--- Determines if the text takes on the color of the player holding it on spawn
--- (such as when taken out of an infinite bag).
-COLOR_ADAPT = true
-
--- Determines if pressing enter will finish editing the text.
--- If this is enabled, you can escape by typing "\n" without quotes.
-ENTER_TO_FINISH = false
-
--- Offset of the Y position of the text from the object. Having the text
--- hover a little (like 0.05) reduces clipping with some surfaces,
--- but will have the opposite effect when flipped upside down.
-HOVER_HEIGHT = 0
-
--- Transparency value for the text box. 0 is invisible, 1 is fully opaque.
--- Note: You must have the leading 0 for decimals. For example, 0.5 (.5 does not work).
-BOX_ALPHA = 1
-
--- Determines if the tool automatically locks after editing is complete.
-AUTOLOCK = false
-
--- Determines if your lift height is temporarily set to 0 when picking up the text tool.
--- Note: dropping the object may not register (usually when clicking too fast),
--- causing your lift height to stay at 0.
-AUTOLIFT = false
-
-----------------------------------
--- END OF VARIABLES TO EDIT
-----------------------------------
-
 -- This table controls what is passed between save/load
-data = {size=200, color=Color(0,0,0), text='', interactable = true}
+data = {}
 
 function onLoad(saved_data)
   if saved_data ~= '' then
@@ -42,17 +16,16 @@ function onLoad(saved_data)
       return
     end
   else
-    data = {size=200, color=Color(0,0,0), text='', interactable = true}
-  end
-
-  if self.held_by_color and COLOR_ADAPT then
-    data.color = Color.fromString(self.held_by_color)
-    updateState()
+    data = {size=200, color=Color(0,0,0), text='', interactable=true,
+        enter_to_finish=false, autolock=false, autolift=false,
+        hover_height=0.05, box_transparency=1}
   end
 
   inputMode()
 end
 
+-- True if in the middle of delay after pressing Enter (with enter_to_finish on)
+finishing = false
 function input_func(obj, color, input, stillEditing)
   local params = getBox(input)
   if params then
@@ -60,38 +33,44 @@ function input_func(obj, color, input, stillEditing)
     self.editInput(params)
   end
 
-  local done = not stillEditing
-  if ENTER_TO_FINISH then
-    if input:sub(-1) == '\n' then
-      input = input:sub(1,-2)
-      done = true
-    end
-  end
-
-  if done then
+  if not stillEditing then
     data.text = input
     updateState()
     if input ~= '' then staticMode() end
+  elseif data.enter_to_finish then
+    -- If enter is pressed: remove last newline and force finish
+    if not finishing and input:sub(-1) == '\n' then
+      finishing = true
+      -- Delay to avoid user's Enter keypress being detected (opens chat box)
+      Wait.frames(function()
+        input = input:sub(1, -2)
+        data.text = input
+        updateState()
+        if input ~= '' then staticMode() else inputMode() end
+        finishing = false
+      end, 10)
+    end
   end
 end
 
 -- When the inpupt box appears and lets the player type in it.
+-- If player is passed, the clear button was clicked and their selection is removed.
 function inputMode(player)
   self.clearContextMenu()
-  if self.getButtons() and #self.getButtons() ~= 0 then
-    self.removeButton(0)
-  end
+  self.clearInputs()
+  self.clearButtons()
   if player then
     self.removeFromPlayerSelection(player)
   end
 
   local size = getBox(data.text, true)
+
   self.createInput({
     input_function = "input_func",
     function_owner = self,
     label          = "Type Here",
     alignment      = 3,
-    position       = {x=0, y=HOVER_HEIGHT, z=0},
+    position       = {x=0, y=data.hover_height, z=0},
     width          = size.width,
     height         = size.height,
     color          = getBackground(data.color),
@@ -111,7 +90,7 @@ end
 -- When the input box disappears and displays the text.
 function staticMode()
   self.clearContextMenu()
-  if AUTOLOCK then
+  if data.autolock then
     self.locked = true
   end
   if self.getInputs() and #self.getInputs() ~= 0 then
@@ -119,15 +98,15 @@ function staticMode()
   end
 
   local displayText = data.text
-  if ENTER_TO_FINISH then
-    displayText = displayText:gsub('\\n', '\n')
+  if data.enter_to_finish then
+    displayText = displayText:gsub('%[n%]', '\n')
   end
 
   self.createButton({
     label=displayText,
     click_function="none",
     function_owner=self,
-    position={0,HOVER_HEIGHT,0}, rotation={0,0,0}, height=0, width=0,
+    position={0,data.hover_height,0}, rotation={0,0,0}, height=0, width=0,
     font_color=data.color, font_size=data.size
   })
 
@@ -167,14 +146,14 @@ function setColor(color)
   end
 end
 
-function getBackground(color) --determines whether to use black or white depending on luminence
+function getBackground(color) --determines whether to use black or white depending on luminance
   local r,g,b = Color(color):get()
 
   local lum = 0.2126*r + 0.7152*g + 0.0722*b
   if lum > 0.75 then
-    return {0.2,0.2,0.2, BOX_ALPHA}
+    return {0.2,0.2,0.2, data.box_transparency}
   else
-    return {1,1,1, BOX_ALPHA}
+    return {1,1,1, data.box_transparency}
   end
 end
 
@@ -217,7 +196,7 @@ end
 
 temp_lift = nil
 function onPickUp(player_color)
-  if AUTOLIFT then
+  if data.autolift then
     local player = Player[player_color]
     temp_lift = player.lift_height
     player.lift_height = 0
@@ -225,17 +204,17 @@ function onPickUp(player_color)
 end
 
 function onDrop(player_color)
-  if AUTOLIFT and temp_lift then
+  if data.autolift and temp_lift then
     Player[player_color].lift_height = temp_lift
-    temp_lift = nil
   end
 end
 
--- Should be called every time
+-- Should be called every time data is modified, allows info to be saved on copy/paste
 function updateState()
   self.script_state = JSON.encode(data)
 end
 
 function onSave()
-  return JSON.encode(data)
+  self.script_state = JSON.encode(data)
+  return self.script_state
 end
