@@ -194,11 +194,12 @@ function applyBagInfo(obj)
       applied_table[option] = value_table.value
     end
 
-    applied_table.color_adapt = nil -- Special case: no need to store color_adapt
+    applied_table.color_adapt = nil -- Special case: no need to store color_adapt into text tool
     applied_table.color = applied_color
     applied_table.text = ''
     applied_table.interactable = true
 
+    obj.setScale(self.getScale())
     obj.setTable('data', applied_table)
     obj.call('updateState')
     obj.call('inputMode')

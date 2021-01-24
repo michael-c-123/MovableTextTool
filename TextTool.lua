@@ -36,7 +36,7 @@ function input_func(obj, color, input, stillEditing)
   if not stillEditing then
     data.text = input
     updateState()
-    if input ~= '' then staticMode() end
+    if input ~= '' then staticMode(color) end
   elseif data.enter_to_finish then
     -- If enter is pressed: remove last newline and force finish
     if not finishing and input:sub(-1) == '\n' then
@@ -46,7 +46,7 @@ function input_func(obj, color, input, stillEditing)
         input = input:sub(1, -2)
         data.text = input
         updateState()
-        if input ~= '' then staticMode() else inputMode() end
+        if input ~= '' then staticMode(color) else inputMode() end
         finishing = false
       end, 10)
     end
@@ -54,14 +54,10 @@ function input_func(obj, color, input, stillEditing)
 end
 
 -- When the inpupt box appears and lets the player type in it.
--- If player is passed, the clear button was clicked and their selection is removed.
-function inputMode(player)
+function inputMode()
   self.clearContextMenu()
   self.clearInputs()
   self.clearButtons()
-  if player then
-    self.removeFromPlayerSelection(player)
-  end
 
   local size = getBox(data.text, true)
 
@@ -79,22 +75,39 @@ function inputMode(player)
     value          = data.text,
   })
 
-  self.addContextMenuItem('Color: Object Tint', function() setColor(self.getColorTint():setAt('a', 1)) end)
-  self.addContextMenuItem('Color: Player', function(color) setColor(Color.fromString(color)) end)
-  self.addContextMenuItem('Color: Black', function() setColor(Color(0,0,0)) end)
-  self.addContextMenuItem('Color: White', function() setColor(Color(1,1,1)) end)
-  self.addContextMenuItem('Size: Increase', function() changeSize(50) end, true)
-  self.addContextMenuItem('Size: Decrease', function() changeSize(-50) end, true)
+  self.addContextMenuItem('Color: Object Tint', function(color)
+    applyMultiple(color, 'setColor')
+  end)
+  self.addContextMenuItem('Color: Player', function(color)
+    applyMultiple(color, 'setColor', {Color.fromString(color)})
+  end)
+  self.addContextMenuItem('Color: Black', function(color)
+    applyMultiple(color, 'setColor', {Color(0,0,0)})
+  end)
+  self.addContextMenuItem('Color: White', function(color)
+    applyMultiple(color, 'setColor', {Color(1,1,1)})
+  end)
+  self.addContextMenuItem('Size: Increase', function(color)
+    applyMultiple(color, 'changeSize', {50})
+  end, true)
+  self.addContextMenuItem('Size: Decrease', function(color)
+    applyMultiple(color, 'changeSize', {-50})
+  end, true)
 end
 
 -- When the input box disappears and displays the text.
-function staticMode()
+function staticMode(player)
   self.clearContextMenu()
   if data.autolock then
     self.locked = true
   end
   if self.getInputs() and #self.getInputs() ~= 0 then
     self.removeInput(0)
+  end
+
+  -- Clear from selecting player
+  if player then
+    self.removeFromPlayerSelection(player)
   end
 
   local displayText = data.text
@@ -110,18 +123,38 @@ function staticMode()
     font_color=data.color, font_size=data.size
   })
 
-  self.addContextMenuItem('Edit Text', inputMode)
-  self.addContextMenuItem('Clear', clear)
-  self.addContextMenuItem('Color: Object Tint', function() setColor(self.getColorTint():setAt('a', 1)) end)
-  self.addContextMenuItem('Color: Player', function(color) setColor(Color.fromString(color)) end)
-  self.addContextMenuItem('Color: Black', function() setColor(Color(0,0,0)) end)
-  self.addContextMenuItem('Color: White', function() setColor(Color(1,1,1)) end)
-  self.addContextMenuItem('Size: Increase', function() changeSize(50) end, true)
-  self.addContextMenuItem('Size: Decrease', function() changeSize(-50) end, true)
-  self.addContextMenuItem('Permalock', permalock)
+  self.addContextMenuItem('Edit Text', function(color)
+    self.removeFromPlayerSelection(color)
+    inputMode()
+  end)
+  self.addContextMenuItem('Clear', function(color)
+    applyMultiple(color, 'clear', _, true)
+  end)
+  self.addContextMenuItem('Color: Object Tint', function(color)
+    applyMultiple(color, 'setColor')
+  end)
+  self.addContextMenuItem('Color: Player', function(color)
+    applyMultiple(color, 'setColor', {Color.fromString(color)})
+  end)
+  self.addContextMenuItem('Color: Black', function(color)
+    applyMultiple(color, 'setColor', {Color(0,0,0)})
+  end)
+  self.addContextMenuItem('Color: White', function(color)
+    applyMultiple(color, 'setColor', {Color(1,1,1)})
+  end)
+  self.addContextMenuItem('Size: Increase', function(color)
+    applyMultiple(color, 'changeSize', {50})
+  end, true)
+  self.addContextMenuItem('Size: Decrease', function(color)
+    applyMultiple(color, 'changeSize', {-50})
+  end, true)
+  self.addContextMenuItem('Permalock', function(color)
+    applyMultiple(color, 'permalock', _, true)
+  end)
 end
 
-function changeSize(delta)
+function changeSize(params)
+  local delta = params[1]
   local newSize = data.size + delta
   if newSize > 800  or newSize < 50 then
     return
@@ -136,8 +169,12 @@ function changeSize(delta)
   end
 end
 
-function setColor(color)
-  data.color = color
+function setColor(params)
+  if params and params[1] then
+    data.color = params[1]
+  else
+    data.color = self.getColorTint():setAt('a', 1) -- Take on color of object tint
+  end
   updateState()
   if self.getButtons() and #self.getButtons() ~= 0 then
     self.editButton({font_color=data.color})
@@ -157,16 +194,32 @@ function getBackground(color) --determines whether to use black or white dependi
   end
 end
 
-function clear(player)
+function clear()
   data.text = ''
   updateState()
-  inputMode(player)
+  inputMode()
 end
 
 function permalock()
   self.interactable = false
   data.interactable = false
   updateState()
+end
+
+function applyMultiple(player_color, func_string, params, static_only)
+  local objs = Player[player_color].getSelectedObjects()
+  for _,obj in ipairs(objs) do
+    if obj.getVar('movableTextTool_cowgoesmoo33') then
+      if not static_only or obj.call('isStatic') then
+        obj.call(func_string, params)
+      end
+    end
+  end
+end
+
+function isStatic()
+  local input = self.getInputs()
+  return not input or #input == 0
 end
 
 function getBox(input, force)
