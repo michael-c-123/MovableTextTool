@@ -67,6 +67,7 @@ function inputMode()
     label          = "Type Here",
     alignment      = 3,
     position       = {x=0, y=data.hover_height, z=0},
+    rotation       = {0, 180, 0},
     width          = size.width,
     height         = size.height,
     color          = getBackground(data.color),
@@ -119,7 +120,7 @@ function staticMode(player)
     label=displayText,
     click_function="none",
     function_owner=self,
-    position={0,data.hover_height,0}, rotation={0,0,0}, height=0, width=0,
+    position={0,data.hover_height,0}, rotation={0,180,0}, height=0, width=0,
     font_color=data.color, font_size=data.size
   })
 
@@ -148,6 +149,7 @@ function staticMode(player)
   self.addContextMenuItem('Size: Decrease', function(color)
     applyMultiple(color, 'changeSize', {-50})
   end, true)
+  self.addContextMenuItem('Attach', attemptAttach)
   self.addContextMenuItem('Permalock', function(color)
     applyMultiple(color, 'permalock', _, true)
   end)
@@ -204,6 +206,70 @@ function permalock()
   self.interactable = false
   data.interactable = false
   updateState()
+end
+
+function attemptAttach(player_color)
+  local objs = Player[player_color].getSelectedObjects()
+  local attachee
+  local attachers = {}
+  for _,obj in ipairs(objs) do
+    if obj.getVar('movableTextTool_cowgoesmoo33') then
+      if obj ~= self then
+        table.insert(attachers, obj)
+      end
+    else
+      if attachee then
+        broadcastToColor("More than one target selected.", player_color)
+        return
+      else
+        attachee = obj
+      end
+    end
+  end
+  if attachee then
+    for i,attacher in ipairs(attachers) do
+      attacher.call('attach', {target = attachee})
+    end
+    attach({target = attachee})
+  else
+    broadcastToColor("You must have a target object in your selection (using click-and-drag or Ctrl+Click) to use this option.", player_color)
+  end
+end
+
+function attach(params)
+  local target = params.target
+  local displayText = data.text
+  if data.enter_to_finish then
+    displayText = displayText:gsub('%[n%]', '\n')
+  end
+
+  local textRotation = self.getRotation():sub(target.getRotation())
+      :add(Vector(0, 180, 0))
+  textRotation.z = -textRotation.z
+
+  local textPosition = target.positionToLocal(
+    self.getPosition():add(Vector(0, data.hover_height, 0))
+  )
+  textPosition.x = -textPosition.x
+
+  local textScale = {}
+  textScale.x = self.getScale().x / target.getScale().x
+  textScale.y = self.getScale().x / target.getScale().y
+  textScale.z = self.getScale().x / target.getScale().z
+
+  local color, size = data.color, data.size
+
+  target.createButton({
+    label=displayText,
+    click_function="none",
+    function_owner=nil,
+    position=textPosition,
+    rotation=textRotation,
+    scale=textScale,
+    height=0, width=0,
+    font_color=color, font_size=size
+  })
+  self.destruct()
 end
 
 function applyMultiple(player_color, func_string, params, static_only)
